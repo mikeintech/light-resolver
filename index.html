@@ -113,8 +113,13 @@
       .poster img { width: 100%; height: 100%; display: block; object-fit: cover; }
       .poster-fallback { height: 100%; display: grid; place-items: center; color: #555c69; font-size: 30px; }
       .type-badge {
-        position: absolute; left: 8px; bottom: 16px; padding: 5px 7px; border-radius: 7px;
-        color: white; background: rgba(8,9,12,.8); backdrop-filter: blur(8px); font-size: 9px; font-weight: 850; text-transform: uppercase;
+        position: absolute; left: 8px; bottom: 16px; padding: 6px 8px; border-radius: 7px;
+        color: white; background: rgba(8,9,12,.9); backdrop-filter: blur(8px); font-size: 10px; font-weight: 950;
+        letter-spacing: .08em; text-transform: uppercase;
+      }
+      .card-context-badge {
+        position: absolute; right: 8px; bottom: 16px; padding: 6px 8px; border-radius: 7px;
+        color: #111214; background: rgba(255,255,255,.94); font-size: 10px; font-weight: 950;
       }
       .progress-track { position: absolute; inset: auto 8px 8px; height: 4px; overflow: hidden; border-radius: 99px; background: rgba(255,255,255,.28); }
       .progress-fill { height: 100%; border-radius: inherit; background: var(--accent); }
@@ -962,6 +967,7 @@
           <div class="player-actions">
             <button class="player-control" id="open-browser-player" title="Open as a top-level browser player" aria-label="Open in browser" hidden><svg viewBox="0 0 24 24"><path d="M14 5h5v5M10 14 19 5M19 13v6H5V5h6"/></svg></button>
             <button class="player-control" id="close-ads" title="Remove visible ad overlays" aria-label="Remove ads"><svg viewBox="0 0 24 24"><path d="m4 4 16 16M7 7H5v12h12v-2M9 5h10v10"/></svg></button>
+            <button class="player-control" id="refresh-player" title="Refresh video" aria-label="Refresh video"><svg viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M6.1 9a7 7 0 0 1 11.7-2L20 9M4 15l2.2 2a7 7 0 0 0 11.7-2"/></svg></button>
             <button class="player-control" id="try-next-source" title="Try another playback path" aria-label="Try another playback path"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1" class="filled"/><circle cx="12" cy="12" r="1" class="filled"/><circle cx="19" cy="12" r="1" class="filled"/></svg></button>
             <button class="player-control" id="player-up-next" title="Episodes and recommendations" aria-label="Episodes and recommendations"><svg viewBox="0 0 24 24"><path d="m8 5 10 7-10 7zM20 5v14"/></svg></button>
             <select class="player-source-picker" id="player-source-picker" title="Choose playback source" aria-label="Choose playback source" hidden></select>
@@ -1063,6 +1069,8 @@
         providerLastFrameLoadAt: 0,
         sourceLastTime: 0,
         sourceLastBufferAt: 0,
+        stallRecoveryTimer: null,
+        lastAutoRefreshAt: 0,
         attemptedSources: new Set(),
         autoAdvancing: false,
         sharedSourceScores: {},
@@ -1077,12 +1085,15 @@
         browserPlayerConnected: false,
         providerTouchTimer: null,
         playbackContext: null,
-        acceptPlaybackProgress: false
+        acceptPlaybackProgress: false,
+        titleCache: null
       };
 
       const $ = (selector) => document.querySelector(selector);
       const PROFILE_INDEX_KEY = "lightbox-profiles";
       const ACTIVE_PROFILE_KEY = "lightbox-active-profile";
+      const HOME_CACHE_KEY = "lightbox-home-catalog-v1";
+      const SOURCE_CACHE_MAX_AGE = 30 * 60 * 1000;
       const androidPlayerListeners = { state: [], fullscreen: [], media: [], overlay: [] };
       if (window.AndroidPlayer) {
         window.__androidPlayerDispatch = (event, payload) => {
@@ -1443,6 +1454,7 @@
           }
         });
         $("#try-next-source").addEventListener("click", tryNextSource);
+        $("#refresh-player").addEventListener("click", () => void refreshActivePlayer(false));
         $("#player-source-picker").addEventListener("change", () => {
           const source = state.sources[Number($("#player-source-picker").value)];
           if (source && source !== state.currentSource) void playSource(source);
@@ -1582,12 +1594,12 @@
         const poster = group.image
           ? `<img src="${escapeHTML(group.image)}" alt="" loading="lazy">`
           : `<div class="poster-fallback">▶</div>`;
-        const details = [group.year, group.genres?.slice(0, 2).join(" · ")].filter(Boolean).join(" · ");
+        const presentation = cardPresentation(group);
         const attribute = recent ? `data-recent-index="${index}"` : `data-group-index="${index}"`;
         return `<button class="poster-card" ${attribute}>
-          <div class="poster">${poster}<span class="type-badge">${escapeHTML(group.type)}</span></div>
+          <div class="poster">${poster}<span class="type-badge">${escapeHTML(group.type)}</span>${presentation.badge ? `<span class="card-context-badge">${escapeHTML(presentation.badge)}</span>` : ""}</div>
           <h3>${escapeHTML(group.title)}</h3>
-          <p>${escapeHTML(details || "Connected catalog")}</p>
+          <p>${escapeHTML(presentation.details)}</p>
         </button>`;
       }
 
@@ -1641,6 +1653,7 @@
 
       async function loadTitleInfo(group) {
         if (group.type !== "Series") return;
+        if (group.titleInfoLoadedAt && Object.keys(group.seasonDetails || {}).length) return;
         const uniqueSourceIds = [...new Set(group.items.map((item) => item.id))];
         const responses = await Promise.all(uniqueSourceIds.map(async (sourceId) => {
           try {
@@ -1663,6 +1676,8 @@
           }
         }
         group.seasons.sort((left, right) => left - right);
+        group.titleInfoLoadedAt = Date.now();
+        cacheTitle(group);
         renderSeasonOptions();
         renderDetailMeta();
         renderResumeStatus();
@@ -1745,6 +1760,14 @@
       async function resolveEpisode(autoPlay) {
         if (!state.selected) return;
         state.showPlaybackOptions = !autoPlay;
+        const cachedSources = readCachedSources();
+        if (cachedSources.length) {
+          state.sources = rankSources(cachedSources);
+          state.attemptedSources = new Set();
+          renderSources();
+          if (autoPlay) await playSource(state.sources[0]);
+          return;
+        }
         const button = autoPlay ? $("#play-button") : $("#resolve-button");
         const original = button.textContent;
         button.disabled = true;
@@ -1754,6 +1777,7 @@
           const resolved = await Promise.allSettled(matches.map(resolveTitleResult));
           const payloads = resolved.filter((result) => result.status === "fulfilled").map((result) => result.value);
           state.sources = rankSources(payloads.flatMap((payload) => payload.sources || []));
+          cacheSources(state.sources);
           state.attemptedSources = new Set();
           renderSources();
           if (!state.sources.length) throw new Error("No sources were returned for this selection.");
@@ -1850,7 +1874,8 @@
         state.mobilePlaybackPrimed = false;
         clearTimeout(state.sourceAttemptTimer);
         clearTimeout(state.sourceErrorTimer);
-        if (source.providerName.startsWith("FMovies")) {
+        if (source.providerName.startsWith("FMovies")
+          && Date.now() - Number(source.lightboxCachedAt || 0) >= SOURCE_CACHE_MAX_AGE) {
           const providerName = source.providerName;
           const matches = matchingProviderResults();
           const resolved = await Promise.allSettled(matches.map(resolveTitleResult));
@@ -1872,6 +1897,8 @@
         state.providerLastFrameLoadAt = 0;
         state.sourceLastTime = 0;
         state.sourceLastBufferAt = 0;
+        clearTimeout(state.stallRecoveryTimer);
+        state.stallRecoveryTimer = null;
         state.playerReturnEpisode = { season: state.season, episode: state.episode };
         state.playerLockedOnce = false;
         state.playerMode = "";
@@ -1971,7 +1998,11 @@
             volume: video.volume
           });
         });
-        video.addEventListener("play", updateControls);
+        video.addEventListener("play", () => {
+          clearTimeout(state.stallRecoveryTimer);
+          state.stallRecoveryTimer = null;
+          updateControls();
+        });
         video.addEventListener("pause", updateControls);
         video.addEventListener("volumechange", updateControls);
         video.addEventListener("ratechange", updateControls);
@@ -1983,7 +2014,10 @@
           $("#player-loading").hidden = true;
           updateControls();
         });
-        video.addEventListener("waiting", () => recordSourceEvent(state.currentSource, "buffer"));
+        video.addEventListener("waiting", () => {
+          recordSourceEvent(state.currentSource, "buffer");
+          scheduleStallRecovery();
+        });
         video.addEventListener("error", () => void handleSourceFailure("media"));
         video.addEventListener("ended", () => void finishPlayback());
         if (forceHls && video.canPlayType("application/vnd.apple.mpegurl")) {
@@ -2450,6 +2484,8 @@
         ++state.playerRequestToken;
         clearTimeout(state.sourceAttemptTimer);
         clearTimeout(state.sourceErrorTimer);
+        clearTimeout(state.stallRecoveryTimer);
+        state.stallRecoveryTimer = null;
         clearTimeout(state.playerControlsTimer);
         clearInterval(state.adCleanupTimer);
         state.adCleanupTimer = null;
@@ -2585,47 +2621,85 @@
       }
 
       async function renderHomeCatalog() {
+        const cached = readHomeCatalogCache();
+        if (cached) {
+          renderHomePayload(cached);
+          hideAppLoading();
+        }
         try {
           const response = await fetch("/api/home");
           const payload = await response.json();
           if (!response.ok) throw new Error("Discovery is unavailable.");
-          state.discoveryFeatured = payload.featured || null;
-          const baseRows = payload.rows || [];
-          state.discoveryRows = [...personalizedRows(baseRows), ...baseRows];
-          $("#discovery-rows").innerHTML = state.discoveryRows.map((row, rowIndex) => `
-            <section class="discovery-section">
-              <div class="section-head"><div><h2>${escapeHTML(row.title)}</h2></div><span class="result-meta">${row.id === "streaming-today" ? `<a href="https://www.tvmaze.com/" target="_blank" rel="noopener">TVmaze</a> · ` : ""}${row.items.length} titles</span></div>
-              <div class="discovery-track">${row.items.map((item, itemIndex) => discoveryCard(item, rowIndex, itemIndex)).join("")}</div>
-            </section>`).join("") || `<div class="empty-state">Discovery titles are temporarily unavailable.</div>`;
-          $("#discovery-rows").querySelectorAll("[data-discovery-row]").forEach((button) => {
-            button.addEventListener("click", () => {
-              const row = state.discoveryRows[Number(button.dataset.discoveryRow)];
-              void openDiscoveryTitle(row.items[Number(button.dataset.discoveryIndex)], button);
-            });
-          });
-          renderFeatured();
-          if (state.selected) renderDetailRecommendations();
+          localStorage.setItem(HOME_CACHE_KEY, JSON.stringify({ savedAt: Date.now(), payload }));
+          renderHomePayload(payload);
         } catch {
-          $("#discovery-rows").innerHTML = `<div class="empty-state">Discovery titles are temporarily unavailable.</div>`;
+          if (!cached) $("#discovery-rows").innerHTML = `<div class="empty-state">Discovery titles are temporarily unavailable.</div>`;
         } finally {
           hideAppLoading();
         }
       }
 
+      function renderHomePayload(payload) {
+        state.discoveryFeatured = payload.featured || null;
+        const baseRows = payload.rows || [];
+        state.discoveryRows = [...personalizedRows(baseRows), ...baseRows];
+        $("#discovery-rows").innerHTML = state.discoveryRows.map((row, rowIndex) => `
+          <section class="discovery-section">
+            <div class="section-head"><div><h2>${escapeHTML(row.title)}</h2></div><span class="result-meta">${row.id === "streaming-today" ? `<a href="https://www.tvmaze.com/" target="_blank" rel="noopener">TVmaze</a> · ` : ""}${row.items.length} titles</span></div>
+            <div class="discovery-track">${row.items.map((item, itemIndex) => discoveryCard(item, rowIndex, itemIndex)).join("")}</div>
+          </section>`).join("") || `<div class="empty-state">Discovery titles are temporarily unavailable.</div>`;
+        $("#discovery-rows").querySelectorAll("[data-discovery-row]").forEach((button) => {
+          button.addEventListener("click", () => {
+            const row = state.discoveryRows[Number(button.dataset.discoveryRow)];
+            void openDiscoveryTitle(row.items[Number(button.dataset.discoveryIndex)], button);
+          });
+        });
+        renderFeatured();
+        if (state.selected) renderDetailRecommendations();
+      }
+
+      function readHomeCatalogCache() {
+        try {
+          const cached = JSON.parse(localStorage.getItem(HOME_CACHE_KEY) || "null");
+          return cached?.payload && Date.now() - Number(cached.savedAt || 0) < 6 * 60 * 60 * 1000
+            ? cached.payload
+            : null;
+        } catch {
+          return null;
+        }
+      }
+
       function discoveryCard(item, rowIndex, itemIndex) {
+        const presentation = cardPresentation(item);
         return `<button class="discovery-card" data-discovery-row="${rowIndex}" data-discovery-index="${itemIndex}">
           <div class="poster"><img src="${escapeHTML(item.image)}" alt="" loading="lazy">
             ${item.rating ? `<span class="rating-badge">IMDb ${escapeHTML(item.rating.toFixed(1))}</span>` : ""}
             <span class="type-badge">${escapeHTML(item.type)}</span>
+            ${presentation.badge ? `<span class="card-context-badge">${escapeHTML(presentation.badge)}</span>` : ""}
           </div>
           <h3>${escapeHTML(item.title)}</h3>
-          <p>${escapeHTML([item.service, item.year, item.genres?.slice(0, 2).join(" · ")].filter(Boolean).join(" · "))}</p>
+          <p>${escapeHTML(presentation.details)}</p>
         </button>`;
       }
 
       async function openDiscoveryTitle(item, focusTarget) {
         if (!item?.title) return;
         state.listReturnFocus = focusTarget || document.activeElement;
+        const cached = cachedTitleFor(item);
+        if (cached) {
+          Object.assign(cached, {
+            image: item.image || cached.image,
+            background: item.background || item.image || cached.background,
+            year: item.year || cached.year,
+            rating: item.rating || cached.rating,
+            description: item.description || cached.description,
+            genres: item.genres?.length ? item.genres : cached.genres,
+            imdbId: item.id || cached.imdbId
+          });
+          openDetail(cached, "home");
+          if (focusTarget) state.listReturnFocus = focusTarget;
+          return;
+        }
         if (focusTarget) focusTarget.disabled = true;
         showAppLoading(`Opening ${item.title}…`);
         try {
@@ -2884,10 +2958,11 @@
         const poster = group.image
           ? `<img src="${escapeHTML(group.image)}" alt="" loading="lazy">`
           : `<div class="poster-fallback">▶</div>`;
+        const presentation = cardPresentation(group);
         return `<button class="poster-card" data-${collection}-index="${index}">
-          <div class="poster">${poster}<span class="type-badge">${escapeHTML(badge)}</span></div>
+          <div class="poster">${poster}<span class="type-badge">${escapeHTML(group.type)}</span><span class="card-context-badge">${escapeHTML(badge || presentation.badge)}</span></div>
           <h3>${escapeHTML(group.title)}</h3>
-          <p>${escapeHTML(group.year || group.type)}</p>
+          <p>${escapeHTML(presentation.details)}</p>
         </button>`;
       }
 
@@ -2931,7 +3006,7 @@
           const episode = item.group.type === "Movie" ? `${formatTime(Math.max(0, item.duration - item.position))} left`
             : `S${item.season} E${item.episode} · ${formatTime(Math.max(0, item.duration - item.position))} left`;
           return `<button class="poster-card" data-progress-index="${index}">
-            <div class="poster">${poster}<span class="type-badge">${escapeHTML(episode)}</span>
+            <div class="poster">${poster}<span class="type-badge">${escapeHTML(item.group.type)}</span><span class="card-context-badge">${escapeHTML(episode)}</span>
               <span class="progress-track"><span class="progress-fill" style="width:${percent}%"></span></span>
             </div>
             <h3>${escapeHTML(item.group.title)}</h3>
@@ -3046,6 +3121,55 @@
         localStorage.setItem(profileStorageKey(name), JSON.stringify(value));
       }
 
+      function readTitleCache() {
+        if (!state.titleCache) state.titleCache = readProfileJSON("title-cache", {});
+        return state.titleCache;
+      }
+
+      function cachedTitleFor(group) {
+        return readTitleCache()[titleIdentity(group)] || null;
+      }
+
+      function cacheTitle(group) {
+        if (!group?.title) return;
+        const cache = readTitleCache();
+        cache[titleIdentity(group)] = compactGroup(group);
+        const entries = Object.entries(cache)
+          .sort((left, right) => Number(right[1]?.cachedAt || 0) - Number(left[1]?.cachedAt || 0))
+          .slice(0, 120);
+        state.titleCache = Object.fromEntries(entries);
+        writeProfileJSON("title-cache", state.titleCache);
+      }
+
+      function sourceCacheKey() {
+        if (!state.selected) return "";
+        return `${progressKey(state.selected, state.season, state.episode)}|${preferredAudio()}`;
+      }
+
+      function cacheSources(sources) {
+        const key = sourceCacheKey();
+        if (!key || !sources.length) return;
+        const cache = readProfileJSON("source-cache", {});
+        cache[key] = { savedAt: Date.now(), sources };
+        const entries = Object.entries(cache)
+          .sort((left, right) => Number(right[1]?.savedAt || 0) - Number(left[1]?.savedAt || 0))
+          .slice(0, 60);
+        writeProfileJSON("source-cache", Object.fromEntries(entries));
+      }
+
+      function readCachedSources() {
+        const entry = readProfileJSON("source-cache", {})[sourceCacheKey()];
+        if (!entry || Date.now() - Number(entry.savedAt || 0) >= SOURCE_CACHE_MAX_AGE) return [];
+        return (entry.sources || []).map((source) => ({ ...source, lightboxCachedAt: entry.savedAt }));
+      }
+
+      function clearCachedSources() {
+        const key = sourceCacheKey();
+        const cache = readProfileJSON("source-cache", {});
+        delete cache[key];
+        writeProfileJSON("source-cache", cache);
+      }
+
       function profilePreferences() {
         return {
           audio: "dub",
@@ -3107,6 +3231,7 @@
         return {
           title: group.title,
           type: group.type,
+          imdbId: group.imdbId,
           year: group.year,
           image: group.image,
           background: group.background,
@@ -3116,12 +3241,38 @@
           providers: group.providers || [],
           seasons: group.seasons || [],
           items: group.items || [],
-          seasonDetails: group.seasonDetails || {}
+          seasonDetails: group.seasonDetails || {},
+          titleInfoLoadedAt: group.titleInfoLoadedAt || 0,
+          cachedAt: Date.now()
         };
       }
 
       function titleIdentity(group) {
         return `${group?.type || ""}|${titleKey(group?.title)}`;
+      }
+
+      function cardPresentation(item) {
+        const group = cachedTitleFor(item) || item;
+        const progress = latestProgressFor(group);
+        if (group.type === "Movie") {
+          return {
+            badge: "",
+            details: ["Movie", group.year, group.genres?.slice(0, 2).join(" · ")].filter(Boolean).join(" · ")
+          };
+        }
+        const season = Number(progress?.season || item.season || 0);
+        const episode = Number(progress?.episode || item.episode || 0);
+        const seasonCount = Number(group.seasons?.length || 0);
+        const knownEpisodes = Object.values(group.seasonDetails || {})
+          .reduce((total, count) => total + Number(count || 0), 0);
+        return {
+          badge: season && episode ? `S${season} E${episode}` : seasonCount ? `${seasonCount} SEASON${seasonCount === 1 ? "" : "S"}` : "",
+          details: season && episode
+            ? `Series · Season ${season} · Episode ${episode}`
+            : seasonCount
+              ? `Series · ${seasonCount} season${seasonCount === 1 ? "" : "s"}${knownEpisodes ? ` · ${knownEpisodes} episodes` : ""}`
+              : ["Series", group.year, group.genres?.slice(0, 2).join(" · ")].filter(Boolean).join(" · ")
+        };
       }
 
       function readMyList() {
@@ -3363,16 +3514,44 @@
           recordSourceEvent(state.currentSource, "success", Date.now() - state.sourceAttemptStartedAt);
           rememberSourceAffinity(state.currentSource);
         }
-        if (state.sourceStarted && !media.paused && readyState < 3 && currentTime <= state.sourceLastTime + .05
-          && Date.now() - state.sourceLastBufferAt > 6000) {
-          state.sourceLastBufferAt = Date.now();
-          recordSourceEvent(state.currentSource, "buffer");
+        const progressing = currentTime > state.sourceLastTime + .05;
+        if (media.paused || progressing) {
+          clearTimeout(state.stallRecoveryTimer);
+          state.stallRecoveryTimer = null;
+        } else if (state.sourceStarted) {
+          scheduleStallRecovery();
+          if (readyState < 3 && Date.now() - state.sourceLastBufferAt > 6000) {
+            state.sourceLastBufferAt = Date.now();
+            recordSourceEvent(state.currentSource, "buffer");
+          }
         }
         state.sourceLastTime = currentTime;
         if (duration > 0 && currentTime / duration >= .92 && !isSelectedWatched()) {
           setSelectedWatched(true);
         }
         if (duration > 0 && duration - currentTime <= 1.5) void finishPlayback();
+      }
+
+      function scheduleStallRecovery() {
+        if (!state.sourceStarted || state.stallRecoveryTimer || !state.currentSource) return;
+        const source = state.currentSource;
+        state.stallRecoveryTimer = setTimeout(() => {
+          state.stallRecoveryTimer = null;
+          if (state.currentSource === source && state.sourceStarted) void refreshActivePlayer(true);
+        }, 12_000);
+      }
+
+      async function refreshActivePlayer(automatic) {
+        if (!state.currentSource) return;
+        const now = Date.now();
+        if (automatic && now - state.lastAutoRefreshAt < 30_000) return;
+        if (automatic) state.lastAutoRefreshAt = now;
+        clearTimeout(state.stallRecoveryTimer);
+        state.stallRecoveryTimer = null;
+        $("#player-loading").hidden = false;
+        $("#player-loading").innerHTML = `<div><div class="spinner"></div><span>${automatic ? "Playback stalled · recovering…" : "Refreshing video…"}</span></div>`;
+        showToast(automatic ? "Playback stalled. Recovering…" : "Refreshing video…");
+        await playSource(state.currentSource);
       }
 
       async function finishPlayback() {
@@ -3393,6 +3572,13 @@
         recordSourceEvent(state.currentSource, "failure");
         const next = rankSources(state.sources).find((source) => !state.attemptedSources.has(sourceAttemptIdentity(source)));
         if (!next) {
+          if (state.sources.some((source) => source.lightboxCachedAt)) {
+            clearCachedSources();
+            state.sources = [];
+            showToast("Refreshing playback options…");
+            await resolveEpisode(true);
+            return;
+          }
           $("#player-loading").hidden = false;
           $("#player-loading").innerHTML = `<div>Playback stopped.<br>Open playback options to try again.</div>`;
           $("#source-panel").hidden = false;
@@ -3567,8 +3753,9 @@
       }
 
       function rememberTitle(group) {
+        cacheTitle(group);
         const recent = readRecent().filter((item) => `${item.type}|${titleKey(item.title)}` !== `${group.type}|${titleKey(group.title)}`);
-        recent.unshift(group);
+        recent.unshift(compactGroup(group));
         writeProfileJSON("recent", recent.slice(0, 18));
         renderRecent();
         renderFeatured();
