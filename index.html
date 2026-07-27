@@ -456,6 +456,15 @@
       .progress-fill { background: white; }
       .discovery-section { margin-top: 22px; }
       .discovery-card { min-width: 0; padding: 0; border: 0; color: white; text-align: left; background: transparent; }
+      .download-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 10px; }
+      .download-card {
+        min-height: 150px; padding: 18px; display: flex; flex-direction: column; align-items: flex-start;
+        color: white; text-decoration: none; background: #181a1d;
+      }
+      .download-card:hover, .download-card:focus-visible { outline: 3px solid white; outline-offset: -3px; }
+      .download-card small { color: var(--muted); }
+      .download-card strong { margin-top: auto; font-size: 19px; }
+      .download-card span { margin-top: 7px; color: #c5c8cc; font-size: 11px; }
       .detail { min-height: 390px; margin: 0; padding: 28px 30px; }
       .detail-bg { filter: blur(14px) saturate(.58); opacity: .44; }
       .detail-content { grid-template-columns: 170px minmax(0,1fr); gap: 24px; }
@@ -692,6 +701,7 @@
         .section-head h2, .card-panel-head h2 { font-size: 20px; }
         #home-view .poster-card, .discovery-card { flex-basis: 138px; }
         .poster-card h3, .discovery-card h3 { font-size: 13px; }
+        .download-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
         .result-meta { display: none; }
         .poster-grid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px 7px; }
         .detail { min-height: 0; padding: 18px 14px; }
@@ -814,6 +824,7 @@
           <button class="nav-button" data-nav="search" title="Search">Search</button>
           <button class="nav-button" data-nav="sports" title="Sports">Sports</button>
           <button class="nav-button" data-nav="recent" title="Recently viewed">History</button>
+          <button class="nav-button" data-nav="downloads" title="Downloads">Downloads</button>
           <div class="nav-spacer"></div>
           <span class="health-dot" id="health-dot" title="Resolver status"></span>
         </nav>
@@ -853,6 +864,16 @@
             <div class="poster-grid" id="recent-grid"></div>
           </section>
           <div id="discovery-rows"><div class="empty-state">Loading movies and series…</div></div>
+          <section class="section" id="downloads-section">
+            <div class="section-head"><div><h2>Get Lightbox</h2><p>Use the lightweight web app or install the full native player</p></div><span class="result-meta">Version 0.29.0</span></div>
+            <div class="download-grid">
+              <a class="download-card" href="https://mikeintech.github.io/light-resolver/"><small>LIGHTWEIGHT · NO DOWNLOAD</small><strong>Web / PWA</strong><span>Best for phones and quick desktop access</span></a>
+              <a class="download-card" href="https://github.com/mikeintech/light-resolver/releases/download/v0.29.0/Lightbox-0.29.0.apk"><small>ANDROID · ANDROID TV</small><strong>Android APK</strong><span>Shield, Google TV, Fire TV, G Cloud and phones</span></a>
+              <a class="download-card" href="https://github.com/mikeintech/light-resolver/releases/download/v0.29.0/Lightbox-0.29.0-mac-arm64.dmg"><small>FULL COMPATIBILITY · APPLE SILICON</small><strong>macOS</strong><span>Electron native player for M-series Macs</span></a>
+              <a class="download-card" href="https://github.com/mikeintech/light-resolver/releases/download/v0.29.0/Lightbox-0.29.0-win-x64.zip"><small>FULL COMPATIBILITY · 64-BIT</small><strong>Windows</strong><span>Portable Electron native player</span></a>
+              <a class="download-card" href="https://github.com/mikeintech/light-resolver/releases/download/v0.29.0/Lightbox-0.29.0-linux-x86_64.AppImage"><small>FULL COMPATIBILITY · X64</small><strong>Linux</strong><span>Portable AppImage</span></a>
+            </div>
+          </section>
         </section>
 
         <section id="search-view" hidden>
@@ -1396,6 +1417,7 @@
             showView("home");
             if (button.dataset.nav === "my-list") $("#my-list-section").scrollIntoView({ behavior: "smooth" });
             if (button.dataset.nav === "recent") $("#recent-section").scrollIntoView({ behavior: "smooth" });
+            if (button.dataset.nav === "downloads") $("#downloads-section").scrollIntoView({ behavior: "smooth" });
           }
         }));
         $("#back-button").addEventListener("click", returnFromDetail);
