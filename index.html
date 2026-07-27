@@ -629,6 +629,14 @@
         pointer-events: none; touch-action: manipulation;
       }
       .player-touch-layer.provider-pass { pointer-events: none; }
+      .provider-play-overlay {
+        position: absolute; z-index: 6; left: 50%; top: 50%; translate: -50% -50%;
+        width: 84px; height: 84px; display: grid; place-items: center; padding: 0;
+        border: 3px solid white; border-radius: 50%; color: white; background: rgba(5,6,8,.62);
+        box-shadow: 0 12px 42px rgba(0,0,0,.5); backdrop-filter: blur(8px);
+      }
+      .provider-play-overlay svg { width: 42px; height: 42px; margin-left: 5px; fill: none; stroke: currentColor; stroke-width: 2; }
+      .provider-play-overlay.click-through { pointer-events: none; }
       .menu-close, .menu-backdrop { display: none; }
       @media (min-width: 761px) {
         .app { display: block; }
@@ -800,6 +808,31 @@
       body.mobile-player-open .player-settings-panel {
         right: max(8px,calc(50vw - 88.8889dvh + 8px));
         bottom: calc(50% - var(--mobile-video-half-height) + 70px);
+      }
+      @media (max-width: 760px) and (orientation: portrait) {
+        body.mobile-player-open .player-shell {
+          display: grid; grid-template-rows: minmax(104px,1fr) var(--mobile-video-height) minmax(150px,1fr);
+        }
+        body.mobile-player-open .player-viewport {
+          position: relative; inset: auto; top: auto; grid-row: 2; align-self: center;
+          width: 100vw; height: var(--mobile-video-height); margin: 0; transform: none;
+        }
+        body.mobile-player-open .player-top,
+        body.mobile-player-open .player-bottom {
+          position: relative; inset: auto; width: 100%; margin: 0; transform: none;
+          background: #0d0e10;
+        }
+        body.mobile-player-open .player-top {
+          grid-row: 1; align-self: end; padding: max(8px,env(safe-area-inset-top)) 8px 10px;
+          border-bottom: 1px solid var(--line);
+        }
+        body.mobile-player-open .player-bottom {
+          grid-row: 3; align-self: start; padding: 10px 8px max(8px,env(safe-area-inset-bottom));
+          border-top: 1px solid var(--line);
+        }
+        body.mobile-player-open .player-settings-panel {
+          position: fixed; right: 8px; bottom: max(8px,env(safe-area-inset-bottom));
+        }
       }
     </style>
   </head>
@@ -1002,6 +1035,7 @@
         </header>
         <div class="player-viewport" id="player-viewport">
           <div class="player-loading" id="player-loading"><div><div class="spinner"></div><span>Opening protected player…</span></div></div>
+          <button class="provider-play-overlay" id="provider-play-overlay" type="button" aria-label="Start video" title="Start video" hidden><svg viewBox="0 0 24 24"><path d="m8 5 11 7-11 7z"/></svg></button>
           <div class="player-touch-layer" id="player-touch-layer" aria-hidden="true"></div>
         </div>
         <footer class="player-bottom">
@@ -1105,6 +1139,8 @@
         playerTouchPhase: 0,
         browserPlayerConnected: false,
         providerTouchTimer: null,
+        providerPlayRetryTimer: null,
+        providerPlayWindowTimer: null,
         playbackContext: null,
         acceptPlaybackProgress: false,
         titleCache: null
@@ -1208,6 +1244,7 @@
           desktopPlayer.onState((status) => {
             if (status.state === "stream" && !state.sourceStarted && state.currentSource) {
               state.sourceStarted = true;
+              stopProviderPlayAttempts();
               clearTimeout(state.sourceAttemptTimer);
               $("#player-loading").hidden = true;
               recordSourceEvent(state.currentSource, "success", Date.now() - state.sourceAttemptStartedAt);
@@ -1508,7 +1545,11 @@
         $("#next-episode").addEventListener("click", () => moveEpisode(1));
         $("#adblock-toggle").addEventListener("change", () => desktopPlayer?.setAdblock($("#adblock-toggle").checked));
         $("#interaction-lock").addEventListener("change", () => commandActivePlayer("lock", $("#interaction-lock").checked));
-        $("#transport-toggle").addEventListener("click", () => commandActivePlayer("toggle"));
+        $("#provider-play-overlay").addEventListener("click", () => void activateLightboxPlay());
+        $("#transport-toggle").addEventListener("click", () => {
+          if (!state.sourceStarted) void activateLightboxPlay();
+          else void commandActivePlayer("toggle");
+        });
         $("#seek-back").addEventListener("click", () => commandActivePlayer("seek", -10));
         $("#seek-forward").addEventListener("click", () => commandActivePlayer("seek", 10));
         $("#seek-position").addEventListener("change", () => commandActivePlayer("position", Number($("#seek-position").value) / 1000));
@@ -1921,6 +1962,7 @@
         state.sourceLastBufferAt = 0;
         clearTimeout(state.stallRecoveryTimer);
         state.stallRecoveryTimer = null;
+        stopProviderPlayAttempts();
         state.playerReturnEpisode = { season: state.season, episode: state.episode };
         state.playerLockedOnce = false;
         state.playerMode = "";
@@ -1990,6 +2032,8 @@
           state.activeHls = null;
         }
         $("#player-viewport").querySelectorAll("video, iframe").forEach((node) => node.remove());
+        showLightboxPlayOverlay(false);
+        startProviderPlayAttempts();
         const video = document.createElement("video");
         video.controls = false;
         video.autoplay = true;
@@ -2034,6 +2078,7 @@
         }, { once: true });
         video.addEventListener("playing", () => {
           $("#player-loading").hidden = true;
+          stopProviderPlayAttempts();
           updateControls();
         });
         video.addEventListener("waiting", () => {
@@ -2120,8 +2165,13 @@
         frame.addEventListener("load", () => {
           state.providerLastFrameLoadAt = Date.now();
           $("#player-loading").hidden = true;
+          showLightboxPlayOverlay(true);
+          startProviderPlayAttempts();
+          noteProviderInteraction();
         });
         $("#player-viewport").append(frame);
+        showLightboxPlayOverlay(true);
+        startProviderPlayAttempts();
         startAccessibleAdCleanup();
         $("#player-loading").hidden = false;
         $("#player-loading").innerHTML = `<div><div class="spinner"></div><span>Loading browser-compatible player…</span></div>`;
@@ -2414,6 +2464,64 @@
         return { handled: true };
       }
 
+      function showLightboxPlayOverlay(clickThrough) {
+        const overlay = $("#provider-play-overlay");
+        const layer = $("#player-touch-layer");
+        clearTimeout(state.providerPlayWindowTimer);
+        overlay.hidden = false;
+        overlay.classList.toggle("click-through", Boolean(clickThrough));
+        if (clickThrough) layer.classList.add("provider-pass");
+        state.providerPlayWindowTimer = setTimeout(() => {
+          overlay.hidden = true;
+          overlay.classList.remove("click-through");
+          if (!state.sourceStarted) layer.classList.remove("provider-pass");
+        }, clickThrough ? 4200 : 12_000);
+      }
+
+      function stopProviderPlayAttempts() {
+        clearInterval(state.providerPlayRetryTimer);
+        clearTimeout(state.providerPlayWindowTimer);
+        state.providerPlayRetryTimer = null;
+        state.providerPlayWindowTimer = null;
+        const overlay = $("#provider-play-overlay");
+        overlay.hidden = true;
+        overlay.classList.remove("click-through");
+        $("#player-touch-layer").classList.remove("provider-pass");
+      }
+
+      function startProviderPlayAttempts() {
+        clearInterval(state.providerPlayRetryTimer);
+        const source = state.currentSource;
+        const startedAt = Date.now();
+        const attempt = async () => {
+          if (state.currentSource !== source || state.sourceStarted || $("#player-modal").hidden
+            || Date.now() - startedAt > 24_000) {
+            clearInterval(state.providerPlayRetryTimer);
+            state.providerPlayRetryTimer = null;
+            return;
+          }
+          cleanAccessiblePlayerAds();
+          await commandActivePlayer("play").catch(() => undefined);
+        };
+        void attempt();
+        state.providerPlayRetryTimer = setInterval(() => void attempt(), 1200);
+      }
+
+      async function activateLightboxPlay() {
+        showLightboxPlayOverlay(state.playerMode === "browser-frame");
+        const result = await commandActivePlayer("play").catch(() => ({ handled: false }));
+        if (result?.handled) {
+          startProviderPlayAttempts();
+          return;
+        }
+        if (state.playerMode === "browser-frame") {
+          showToast("Tap the outlined play target to start this provider.");
+          return;
+        }
+        showToast("The player is still connecting. Lightbox will keep trying.");
+        startProviderPlayAttempts();
+      }
+
       async function runCapabilityCommand(command, label) {
         try {
           const result = await commandActivePlayer(command);
@@ -2508,6 +2616,7 @@
         clearTimeout(state.sourceErrorTimer);
         clearTimeout(state.stallRecoveryTimer);
         state.stallRecoveryTimer = null;
+        stopProviderPlayAttempts();
         clearTimeout(state.playerControlsTimer);
         clearInterval(state.adCleanupTimer);
         state.adCleanupTimer = null;
@@ -3532,6 +3641,7 @@
         const readyState = Number(media.readyState ?? 4);
         if (!state.sourceStarted && currentTime > .25 && readyState >= 2) {
           state.sourceStarted = true;
+          stopProviderPlayAttempts();
           clearTimeout(state.sourceAttemptTimer);
           recordSourceEvent(state.currentSource, "success", Date.now() - state.sourceAttemptStartedAt);
           rememberSourceAffinity(state.currentSource);
