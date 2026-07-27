@@ -595,10 +595,6 @@
       .player-timeline { display: grid; grid-template-columns: minmax(100px,1fr) auto; gap: 12px; align-items: center; }
       .player-timeline input, .player-volume input { width: 100%; min-height: 30px; accent-color: white; cursor: pointer; }
       .provider-control-hint { display: none; color: #e6e8eb; font-size: 12px; font-weight: 800; text-align: center; }
-      body.provider-native-player .player-timeline,
-      body.provider-native-player #seek-back,
-      body.provider-native-player #transport-toggle,
-      body.provider-native-player #seek-forward { display: none; }
       body.provider-native-player .provider-control-hint { display: block; }
       body.live-player .player-timeline,
       body.live-player #seek-back,
@@ -743,8 +739,15 @@
         .player-control.primary-control { width: 54px; height: 54px; }
         .player-actions {
           grid-column: 1 / -1; width: 100%; max-width: none; margin: 0;
-          justify-content: center; gap: 2px; overflow: visible;
+          display: grid; grid-template-columns: repeat(7,40px); justify-content: center;
+          gap: 3px; overflow: visible;
         }
+        .player-actions .player-control { width: 40px; height: 40px; }
+        .player-actions .player-control svg { width: 20px; height: 20px; }
+        .player-actions .player-source-picker { width: 83px; height: 40px; grid-column: span 2; }
+        #fullscreen-player { order: -3; }
+        #refresh-player { order: -2; }
+        #try-next-source { order: -1; }
         .mobile-only-player-action { display: grid; }
         #player-captions { display: none; }
         #fullscreen-player { color: #101113; background: white; }
@@ -753,7 +756,7 @@
         .player-control-row > .player-control-group { flex: 0 0 auto; }
         .player-control-row > .player-control-group:last-child { display: none; }
         .player-control-group.episode-controls { display: flex; }
-        .episode-controls .player-control { width: auto; min-width: 72px; padding: 0 10px; display: flex; gap: 6px; }
+        .episode-controls .player-control { width: auto; min-width: 64px; padding: 0 6px; display: flex; gap: 3px; }
         .mobile-control-label { display: inline; }
         .player-settings-panel { right: 8px; bottom: 70px; }
         .profile-panel { width: 100vw; padding: 16px; }
@@ -793,8 +796,12 @@
       }
       body.mobile-player-open .player-actions {
         grid-column: 1 / -1; width: 100%; max-width: none; margin: 0;
-        justify-content: center; gap: 2px; overflow: visible;
+        display: grid; grid-template-columns: repeat(7,40px); justify-content: center;
+        gap: 3px; overflow: visible;
       }
+      body.mobile-player-open .player-actions .player-control { width: 40px; height: 40px; }
+      body.mobile-player-open .player-actions .player-control svg { width: 20px; height: 20px; }
+      body.mobile-player-open .player-actions .player-source-picker { width: 83px; height: 40px; grid-column: span 2; }
       body.mobile-player-open .mobile-only-player-action { display: grid; }
       body.mobile-player-open #player-captions { display: none; }
       body.mobile-player-open #fullscreen-player { color: #101113; background: white; }
@@ -802,7 +809,7 @@
       body.mobile-player-open .player-control-row > .player-control-group:last-child { display: none; }
       body.mobile-player-open .player-control-group.episode-controls { display: flex; }
       body.mobile-player-open .episode-controls .player-control {
-        width: auto; min-width: 72px; padding: 0 10px; display: flex; gap: 6px;
+        width: auto; min-width: 64px; padding: 0 6px; display: flex; gap: 3px;
       }
       body.mobile-player-open .mobile-control-label { display: inline; }
       body.mobile-player-open .player-settings-panel {
