@@ -2107,50 +2107,34 @@
         void video.play().catch(() => undefined);
       }
 
-      const extractablePlayerHosts = new Set([
-        "netoda.tech", "vidcore.net", "vidapi.xyz", "share.cdnm.ink",
-        "embedmaster.link", "vidfast.pro", "multiembed.mov", "moviesapi.to",
-        "player.videasy.net", "player.videasy.to", "vsembed.su", "www.nontongo.win"
-      ]);
-
-      function canExtractPlayer(target) {
-        try {
-          return extractablePlayerHosts.has(new URL(target).hostname);
-        } catch {
-          return false;
-        }
-      }
-
       async function playMobileWebSource(target, source, requestToken) {
         state.externalTarget = target;
-        if (canExtractPlayer(target)) {
-          $("#player-loading").hidden = false;
-          $("#player-loading").innerHTML = `<div><div class="spinner"></div><span>Preparing Lightbox controls…</span></div>`;
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 9000);
-          try {
-            const response = await fetch("/api/extract-player", {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({ url: target }),
-              signal: controller.signal
-            });
-            const payload = await response.json();
-            if (!response.ok) throw new Error(payload.error || "This player did not expose a compatible stream.");
-            if (requestToken !== state.playerRequestToken || state.currentSource !== source) return;
-            state.playerMode = "local";
-            $("#open-browser-player").hidden = true;
-            playLocalMedia(payload.url, true);
-            state.sourceAttemptTimer = setTimeout(() => {
-              if (!state.sourceStarted && state.currentSource === source) void handleSourceFailure("timeout");
-            }, 24_000);
-            showPlayerChrome(false);
-            return;
-          } catch {
-            if (requestToken !== state.playerRequestToken || state.currentSource !== source) return;
-          } finally {
-            clearTimeout(timeout);
-          }
+        $("#player-loading").hidden = false;
+        $("#player-loading").innerHTML = `<div><div class="spinner"></div><span>Preparing protected playback…</span></div>`;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 9000);
+        try {
+          const response = await fetch("/api/extract-player", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ url: target }),
+            signal: controller.signal
+          });
+          const payload = await response.json();
+          if (!response.ok) throw new Error(payload.error || "This player did not expose a compatible stream.");
+          if (requestToken !== state.playerRequestToken || state.currentSource !== source) return;
+          state.playerMode = "local";
+          $("#open-browser-player").hidden = true;
+          playLocalMedia(payload.url, true);
+          state.sourceAttemptTimer = setTimeout(() => {
+            if (!state.sourceStarted && state.currentSource === source) void handleSourceFailure("timeout");
+          }, 24_000);
+          showPlayerChrome(false);
+          return;
+        } catch {
+          if (requestToken !== state.playerRequestToken || state.currentSource !== source) return;
+        } finally {
+          clearTimeout(timeout);
         }
         playBrowserPlayer(target);
       }
