@@ -368,7 +368,8 @@
         border-radius: 0 !important; box-shadow: none !important; transition: none !important;
       }
       body { background: var(--bg); }
-      button:focus-visible, input:focus-visible, select:focus-visible {
+      button:focus-visible, input:focus-visible, select:focus-visible,
+      button:focus, input:focus, select:focus, [tabindex]:focus {
         outline: 4px solid white; outline-offset: 2px; box-shadow: none !important;
       }
       .app { grid-template-columns: 112px minmax(0,1fr); }
@@ -901,6 +902,10 @@
               <div class="source-list" id="source-list"><div class="source-placeholder">Lightbox will choose the best available playback path.</div></div>
             </aside>
           </div>
+          <section class="discovery-section" id="detail-recommendations" hidden>
+            <div class="section-head"><div><h2 id="recommendation-heading">More like this</h2><p>Chosen from your profile and this title</p></div></div>
+            <div class="discovery-track" id="recommendation-track"></div>
+          </section>
         </section>
 
         <section id="sports-view" hidden>
@@ -958,6 +963,7 @@
             <button class="player-control" id="open-browser-player" title="Open as a top-level browser player" aria-label="Open in browser" hidden><svg viewBox="0 0 24 24"><path d="M14 5h5v5M10 14 19 5M19 13v6H5V5h6"/></svg></button>
             <button class="player-control" id="close-ads" title="Remove visible ad overlays" aria-label="Remove ads"><svg viewBox="0 0 24 24"><path d="m4 4 16 16M7 7H5v12h12v-2M9 5h10v10"/></svg></button>
             <button class="player-control" id="try-next-source" title="Try another playback path" aria-label="Try another playback path"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1" class="filled"/><circle cx="12" cy="12" r="1" class="filled"/><circle cx="19" cy="12" r="1" class="filled"/></svg></button>
+            <button class="player-control" id="player-up-next" title="Episodes and recommendations" aria-label="Episodes and recommendations"><svg viewBox="0 0 24 24"><path d="m8 5 10 7-10 7zM20 5v14"/></svg></button>
             <select class="player-source-picker" id="player-source-picker" title="Choose playback source" aria-label="Choose playback source" hidden></select>
             <button class="player-control" id="player-captions" title="Captions" aria-label="Captions"><span class="cc-icon">CC</span></button>
             <button class="player-control" id="player-cast" title="Cast" aria-label="Cast"><svg viewBox="0 0 24 24"><path d="M4 18a2 2 0 0 1 2 2M4 14a6 6 0 0 1 6 6M4 10a10 10 0 0 1 10 10M5 5h14v11"/></svg></button>
@@ -1008,6 +1014,10 @@
           <label class="player-setting"><span>Block ads and popups</span><input id="adblock-toggle" type="checkbox" checked></label>
           <label class="player-setting"><span>Block provider clicks</span><input id="interaction-lock" type="checkbox"></label>
         </aside>
+        <aside class="player-settings-panel" id="player-up-next-panel" hidden>
+          <h3>Up next</h3>
+          <div id="player-up-next-list"></div>
+        </aside>
       </section>
     </div>
     <div class="toast" id="toast"></div>
@@ -1038,6 +1048,8 @@
         featured: null,
         discoveryFeatured: null,
         discoveryRows: [],
+        detailRecommendations: [],
+        playerRecommendations: [],
         listReturnFocus: null,
         playerReturnEpisode: null,
         lastListView: "home",
@@ -1063,7 +1075,9 @@
         mobileScrollY: 0,
         playerTouchPhase: 0,
         browserPlayerConnected: false,
-        providerTouchTimer: null
+        providerTouchTimer: null,
+        playbackContext: null,
+        acceptPlaybackProgress: false
       };
 
       const $ = (selector) => document.querySelector(selector);
@@ -1207,6 +1221,7 @@
           });
           desktopPlayer.onOverlayAction((action) => {
             if (action === "close") void closePlayer();
+            if (action === "minimized") returnToTitleListFromPlayer();
             if (action === "next-source") void tryNextSource();
             if (action === "provider-interaction") noteProviderInteraction();
             if (action.startsWith("select-source:")) {
@@ -1215,6 +1230,12 @@
             }
             if (action === "previous-episode") void moveEpisode(-1);
             if (action === "next-episode") void moveEpisode(1);
+            if (action.startsWith("recommendation:")) {
+              const item = state.playerRecommendations[Number(action.split(":")[1])];
+              if (item) {
+                void closePlayer().then(() => openDiscoveryTitle(item, null));
+              }
+            }
             if (action.startsWith("unsupported:")) showToast(`${action.split(":")[1]} is not available for this player.`);
           });
           new ResizeObserver(syncPlayerBounds).observe($("#player-viewport"));
@@ -1224,6 +1245,97 @@
       }
 
       function bindEvents() {
+        const searchInput = $("#search-input");
+        if (window.AndroidPlayer) {
+          const tvFocusable = () => [...document.querySelectorAll(
+            "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex='-1'])"
+          )].filter((element) => {
+            const rect = element.getBoundingClientRect();
+            const style = getComputedStyle(element);
+            return !element.hidden && style.visibility !== "hidden" && style.display !== "none"
+              && rect.width > 0 && rect.height > 0;
+          });
+          document.addEventListener("keydown", (event) => {
+            const directions = {
+              ArrowLeft: [-1, 0], ArrowRight: [1, 0],
+              ArrowUp: [0, -1], ArrowDown: [0, 1]
+            };
+            const direction = directions[event.key];
+            if (!direction) return;
+            const active = document.activeElement;
+            const editingText = active instanceof HTMLInputElement
+              && active.type !== "range" && !active.readOnly;
+            if (editingText || active instanceof HTMLSelectElement
+              || (active instanceof HTMLInputElement && active.type === "range"
+                && direction[0] !== 0)) return;
+            const candidates = tvFocusable();
+            if (!candidates.length) return;
+            const from = active?.getBoundingClientRect?.();
+            let target = candidates[0];
+            if (from && active !== document.body) {
+              const fromX = from.left + from.width / 2;
+              const fromY = from.top + from.height / 2;
+              const zone = (element) => element.closest("#player-modal, .profile-panel") ? "overlay"
+                : element.closest(".rail") ? "rail"
+                : element.closest(".topbar") ? "topbar"
+                : "content";
+              const activeZone = zone(active);
+              const inDirection = (pool) => pool
+                .filter((candidate) => candidate !== active)
+                .map((candidate) => {
+                  const rect = candidate.getBoundingClientRect();
+                  const dx = rect.left + rect.width / 2 - fromX;
+                  const dy = rect.top + rect.height / 2 - fromY;
+                  const primary = direction[0] ? dx * direction[0] : dy * direction[1];
+                  const secondary = Math.abs(direction[0] ? dy : dx);
+                  const crossOverlap = direction[0]
+                    ? Math.min(from.bottom, rect.bottom) - Math.max(from.top, rect.top)
+                    : Math.min(from.right, rect.right) - Math.max(from.left, rect.left);
+                  return {
+                    candidate,
+                    primary,
+                    score: primary + secondary * 3 + (crossOverlap > 0 ? 0 : 10000)
+                  };
+                })
+                .filter(({ primary }) => primary > 4)
+                .sort((a, b) => a.score - b.score)[0]?.candidate;
+              const sameZone = candidates.filter((candidate) => zone(candidate) === activeZone);
+              target = inDirection(sameZone);
+              if (!target && activeZone === "content") {
+                if (event.key === "ArrowLeft") {
+                  target = inDirection(candidates.filter((candidate) => zone(candidate) === "rail"));
+                } else if (event.key === "ArrowUp") {
+                  target = inDirection(candidates.filter((candidate) => zone(candidate) === "topbar"));
+                }
+              } else if (!target && activeZone === "topbar" && event.key === "ArrowDown") {
+                target = inDirection(candidates.filter((candidate) => zone(candidate) === "content"));
+              } else if (!target && activeZone === "rail" && event.key === "ArrowRight") {
+                target = inDirection(candidates.filter((candidate) => zone(candidate) === "content"));
+              }
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            if (!target) return;
+            target.focus();
+            target.scrollIntoView({ block: "nearest", inline: "nearest" });
+          }, true);
+          const lockTvSearch = () => {
+            searchInput.readOnly = true;
+            searchInput.setAttribute("inputmode", "none");
+          };
+          const activateTvSearch = () => {
+            searchInput.readOnly = false;
+            searchInput.removeAttribute("inputmode");
+          };
+          lockTvSearch();
+          searchInput.addEventListener("pointerdown", activateTvSearch);
+          searchInput.addEventListener("keydown", (event) => {
+            if ((event.key === "Enter" || event.key === " ") && searchInput.readOnly) {
+              activateTvSearch();
+            }
+          });
+          searchInput.addEventListener("blur", lockTvSearch);
+        }
         $("#menu-toggle").addEventListener("click", () => setMenuOpen(!document.body.classList.contains("menu-open")));
         $("#menu-close").addEventListener("click", () => setMenuOpen(false));
         $("#menu-backdrop").addEventListener("click", () => setMenuOpen(false));
@@ -1253,6 +1365,7 @@
         $("#search-form").addEventListener("submit", (event) => {
           event.preventDefault();
           search($("#search-input").value.trim());
+          if (window.AndroidPlayer) $("#search-input").blur();
         });
         $("#featured-play").addEventListener("click", () => {
           if (!state.featured) return;
@@ -1342,7 +1455,13 @@
         $("#player-airplay").addEventListener("click", () => void runCapabilityCommand("airplay", "AirPlay"));
         $("#mobile-airplay").addEventListener("click", () => void runCapabilityCommand("airplay", "AirPlay"));
         $("#player-settings").addEventListener("click", () => {
+          $("#player-up-next-panel").hidden = true;
           $("#player-settings-panel").hidden = !$("#player-settings-panel").hidden;
+          showPlayerChrome(true);
+        });
+        $("#player-up-next").addEventListener("click", () => {
+          $("#player-settings-panel").hidden = true;
+          $("#player-up-next-panel").hidden = !$("#player-up-next-panel").hidden;
           showPlayerChrome(true);
         });
         $("#mobile-player-settings").addEventListener("click", () => {
@@ -1501,6 +1620,7 @@
         renderSeasonOptions();
         renderEpisodes();
         renderSources();
+        renderDetailRecommendations();
         rememberTitle(group);
         showView("detail");
         if (window.AndroidPlayer) requestAnimationFrame(() => $("#play-button").focus());
@@ -1718,6 +1838,14 @@
       async function playSource(source) {
         if (!source) return;
         const requestToken = ++state.playerRequestToken;
+        const playbackContext = {
+          group: state.selected,
+          season: state.season,
+          episode: state.episode
+        };
+        state.playerRecommendations = recommendationsFor(playbackContext.group, 6);
+        renderPlayerUpNext();
+        state.acceptPlaybackProgress = false;
         resetPlayerTouchCycle();
         state.mobilePlaybackPrimed = false;
         clearTimeout(state.sourceAttemptTimer);
@@ -1765,6 +1893,8 @@
         const target = source.browserUrl || source.url;
         if (source.external || source.browserUrl) {
           if (!desktopPlayer?.available) {
+            state.playbackContext = playbackContext;
+            state.acceptPlaybackProgress = true;
             await playMobileWebSource(target, source, requestToken);
             return;
           }
@@ -1783,12 +1913,17 @@
             resumeAt: smartResumePosition(),
             volume: profilePreferences().volume,
             sources: state.sources.map((_item, index) => index === 0 ? "Best" : `Source ${index + 1}`),
-            sourceIndex: Math.max(0, state.sources.indexOf(source))
+            sourceIndex: Math.max(0, state.sources.indexOf(source)),
+            recommendations: state.playerRecommendations.map((item) => item.title)
           });
+          state.playbackContext = playbackContext;
+          state.acceptPlaybackProgress = true;
           requestAnimationFrame(syncPlayerBounds);
         } else {
           state.playerMode = "local";
           await desktopPlayer?.close();
+          state.playbackContext = playbackContext;
+          state.acceptPlaybackProgress = true;
           playLocalMedia(target);
         }
         state.sourceAttemptTimer = setTimeout(() => {
@@ -1798,6 +1933,7 @@
       }
 
       function playLocalMedia(url, forceHls = false) {
+        const playbackContext = state.playbackContext;
         document.body.classList.remove("provider-native-player");
         document.body.classList.remove("live-player");
         if (state.activeHls) {
@@ -1825,7 +1961,7 @@
           $("#player-speed").value = String(video.playbackRate || 1);
         };
         video.addEventListener("timeupdate", () => {
-          rememberProgress(video.currentTime, video.duration);
+          rememberProgress(video.currentTime, video.duration, playbackContext);
           updateControls();
           observePlaybackMedia({
             currentTime: video.currentTime,
@@ -1840,7 +1976,7 @@
         video.addEventListener("volumechange", updateControls);
         video.addEventListener("ratechange", updateControls);
         video.addEventListener("loadedmetadata", () => {
-          const resumeAt = smartResumePosition();
+          const resumeAt = smartResumePositionFor(playbackContext);
           if (resumeAt > 0 && resumeAt < video.duration - 20) video.currentTime = resumeAt;
         }, { once: true });
         video.addEventListener("playing", () => {
@@ -2319,6 +2455,8 @@
         state.adCleanupTimer = null;
         resetPlayerTouchCycle();
         await desktopPlayer?.close();
+        state.acceptPlaybackProgress = false;
+        state.playbackContext = null;
         if (state.activeHls) {
           state.activeHls.destroy();
           state.activeHls = null;
@@ -2334,6 +2472,7 @@
         unlockMobilePlayerViewport();
         document.body.classList.remove("player-fullscreen");
         $("#player-settings-panel").hidden = true;
+        $("#player-up-next-panel").hidden = true;
         state.playerMode = "";
         state.browserPlayerConnected = false;
         state.externalTarget = "";
@@ -2348,16 +2487,114 @@
         restorePlayerFocus();
       }
 
+      function returnToTitleListFromPlayer() {
+        $("#player-modal").hidden = true;
+        $("#player-modal").classList.remove("controls-hidden");
+        $("#player-settings-panel").hidden = true;
+        $("#player-up-next-panel").hidden = true;
+        unlockMobilePlayerViewport();
+        document.body.classList.remove("player-fullscreen");
+        showView(state.lastListView || "home");
+        requestAnimationFrame(() => {
+          const view = views[state.lastListView] || views.home;
+          const target = state.listReturnFocus?.isConnected
+            ? state.listReturnFocus
+            : view.querySelector(".poster-card, .discovery-card, .episode, button");
+          target?.scrollIntoView({ block: "nearest", inline: "nearest" });
+          target?.focus();
+        });
+      }
+
+      function uniqueDiscoveryItems(rows) {
+        const seen = new Set();
+        return rows.flatMap((row) => row.items || []).filter((item) => {
+          const key = item.id || `${item.type}|${titleKey(item.title)}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+      }
+
+      function recommendationsFor(group, limit = 12, rows = state.discoveryRows) {
+        if (!group) return [];
+        const genres = new Set((group.genres || []).map((genre) => String(genre).toLowerCase()));
+        return uniqueDiscoveryItems(rows)
+          .filter((item) => titleKey(item.title) !== titleKey(group.title))
+          .map((item) => ({
+            item,
+            score: (item.type === group.type ? 8 : 0)
+              + (item.genres || []).filter((genre) => genres.has(String(genre).toLowerCase())).length * 10
+              + Number(item.rating || 0)
+          }))
+          .filter(({ score }) => score >= 8)
+          .sort((left, right) => right.score - left.score)
+          .slice(0, limit)
+          .map(({ item }) => item);
+      }
+
+      function personalizedRows(baseRows) {
+        const history = [
+          ...readProgress().map((item) => item.group),
+          ...readRecent(),
+          ...Object.values(readWatched()).map((item) => item.group)
+        ].filter(Boolean);
+        const genreCounts = new Map();
+        history.forEach((group) => (group.genres || []).forEach((genre) => {
+          genreCounts.set(genre, (genreCounts.get(genre) || 0) + 1);
+        }));
+        const rows = [];
+        const latest = history[0];
+        if (latest) {
+          const items = recommendationsFor(latest, 18, baseRows);
+          if (items.length >= 4) rows.push({
+            id: "because-latest",
+            title: `Because you watched ${latest.title}`,
+            items
+          });
+        }
+        [...genreCounts.entries()]
+          .sort((left, right) => right[1] - left[1])
+          .slice(0, 2)
+          .forEach(([genre]) => {
+            const items = uniqueDiscoveryItems(baseRows)
+              .filter((item) => (item.genres || []).includes(genre))
+              .slice(0, 18);
+            if (items.length >= 4) rows.push({
+              id: `profile-${titleKey(genre)}`,
+              title: `More ${genre} for you`,
+              items
+            });
+          });
+        return rows;
+      }
+
+      function renderDetailRecommendations() {
+        const section = $("#detail-recommendations");
+        state.detailRecommendations = recommendationsFor(state.selected, 14);
+        section.hidden = !state.detailRecommendations.length;
+        if (!state.detailRecommendations.length) return;
+        $("#recommendation-heading").textContent = `More like ${state.selected.title}`;
+        $("#recommendation-track").innerHTML = state.detailRecommendations.map((item, index) =>
+          discoveryCard(item, "recommendation", index)
+        ).join("");
+        $("#recommendation-track").querySelectorAll("[data-discovery-row='recommendation']").forEach((button) => {
+          button.addEventListener("click", () => {
+            void openDiscoveryTitle(state.detailRecommendations[Number(button.dataset.discoveryIndex)], button);
+          });
+        });
+      }
+
       async function renderHomeCatalog() {
         try {
           const response = await fetch("/api/home");
           const payload = await response.json();
           if (!response.ok) throw new Error("Discovery is unavailable.");
           state.discoveryFeatured = payload.featured || null;
-          state.discoveryRows = payload.rows || [];
+          const baseRows = payload.rows || [];
+          state.discoveryRows = [...personalizedRows(baseRows), ...baseRows];
           $("#discovery-rows").innerHTML = state.discoveryRows.map((row, rowIndex) => `
             <section class="discovery-section">
-              <div class="section-head"><div><h2>${escapeHTML(row.title)}</h2></div><span class="result-meta">${row.items.length} titles</span></div>
+              <div class="section-head"><div><h2>${escapeHTML(row.title)}</h2></div><span class="result-meta">${row.id === "streaming-today" ? `<a href="https://www.tvmaze.com/" target="_blank" rel="noopener">TVmaze</a> · ` : ""}${row.items.length} titles</span></div>
               <div class="discovery-track">${row.items.map((item, itemIndex) => discoveryCard(item, rowIndex, itemIndex)).join("")}</div>
             </section>`).join("") || `<div class="empty-state">Discovery titles are temporarily unavailable.</div>`;
           $("#discovery-rows").querySelectorAll("[data-discovery-row]").forEach((button) => {
@@ -2367,6 +2604,7 @@
             });
           });
           renderFeatured();
+          if (state.selected) renderDetailRecommendations();
         } catch {
           $("#discovery-rows").innerHTML = `<div class="empty-state">Discovery titles are temporarily unavailable.</div>`;
         } finally {
@@ -2381,7 +2619,7 @@
             <span class="type-badge">${escapeHTML(item.type)}</span>
           </div>
           <h3>${escapeHTML(item.title)}</h3>
-          <p>${escapeHTML([item.year, item.genres?.slice(0, 2).join(" · ")].filter(Boolean).join(" · "))}</p>
+          <p>${escapeHTML([item.service, item.year, item.genres?.slice(0, 2).join(" · ")].filter(Boolean).join(" · "))}</p>
         </button>`;
       }
 
@@ -2542,6 +2780,25 @@
         requestAnimationFrame(syncPlayerBounds);
       }
 
+      function renderPlayerUpNext() {
+        const list = $("#player-up-next-list");
+        const nextEpisode = state.selected?.type === "Series"
+          ? `<button class="player-setting" data-player-next-episode><span>Next episode</span><strong>Play</strong></button>`
+          : "";
+        list.innerHTML = nextEpisode + state.playerRecommendations.map((item, index) =>
+          `<button class="player-setting" data-player-recommendation="${index}"><span>${escapeHTML(item.title)}</span><strong>${escapeHTML(item.type)}</strong></button>`
+        ).join("");
+        list.querySelector("[data-player-next-episode]")?.addEventListener("click", () => void moveEpisode(1));
+        list.querySelectorAll("[data-player-recommendation]").forEach((button) => {
+          button.addEventListener("click", async () => {
+            const item = state.playerRecommendations[Number(button.dataset.playerRecommendation)];
+            if (!item) return;
+            await closePlayer();
+            void openDiscoveryTitle(item, null);
+          });
+        });
+      }
+
       async function moveEpisode(direction) {
         if (!state.selected || state.selected.type === "Movie") return;
         if (state.currentSource) rememberSourceAffinity(state.currentSource);
@@ -2700,34 +2957,38 @@
         void resolveEpisode(true);
       }
 
-      function rememberProgress(position, duration) {
-        if (!state.selected || !Number.isFinite(position) || !Number.isFinite(duration) || duration <= 0) return;
+      function rememberProgress(position, duration, context = state.playbackContext) {
+        const group = context?.group;
+        const season = Number(context?.season || 1);
+        const episode = Number(context?.episode || 1);
+        if (!state.acceptPlaybackProgress || !group || !Number.isFinite(position)
+          || !Number.isFinite(duration) || duration <= 0) return;
         const now = Date.now();
         if (now - state.lastProgressSave < 5000 && position < duration - 10) return;
         state.lastProgressSave = now;
         const items = readProgress();
-        const key = progressKey(state.selected, state.season, state.episode);
+        const key = progressKey(group, season, episode);
         const compactGroup = {
-          title: state.selected.title,
-          type: state.selected.type,
-          year: state.selected.year,
-          image: state.selected.image,
-          background: state.selected.background,
-          rating: state.selected.rating,
-          description: state.selected.description,
-          genres: state.selected.genres,
-          providers: state.selected.providers,
-          seasons: state.selected.seasons,
-          items: state.selected.items,
-          seasonDetails: state.selected.seasonDetails
+          title: group.title,
+          type: group.type,
+          year: group.year,
+          image: group.image,
+          background: group.background,
+          rating: group.rating,
+          description: group.description,
+          genres: group.genres,
+          providers: group.providers,
+          seasons: group.seasons,
+          items: group.items,
+          seasonDetails: group.seasonDetails
         };
         const next = items.filter((item) => item.key !== key);
-        if (duration - position >= 10 && !isWatched(state.selected, state.season, state.episode)) {
+        if (duration - position >= 10 && !isWatched(group, season, episode)) {
           next.unshift({
             key,
             group: compactGroup,
-            season: state.season,
-            episode: state.episode,
+            season,
+            episode,
             position,
             duration,
             updatedAt: now
@@ -2742,8 +3003,16 @@
       }
 
       function readProgress() {
-        return readProfileJSON("progress", [])
+        const items = readProfileJSON("progress", [])
           .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0));
+        return items.filter((item) => !items.some((original) =>
+          original.key !== item.key
+          && Number(original.updatedAt || 0) < Number(item.updatedAt || 0)
+          && Number(item.updatedAt || 0) - Number(original.updatedAt || 0) <= 20_000
+          && Number(item.position || 0) > 5
+          && Math.abs(Number(original.position || 0) - Number(item.position || 0)) <= 1
+          && Math.abs(Number(original.duration || 0) - Number(item.duration || 0)) <= 1
+        ));
       }
 
       function readProfiles() {
@@ -2969,7 +3238,19 @@
       }
 
       function smartResumePosition() {
-        const progress = selectedProgress();
+        return smartResumePositionFor({
+          group: state.selected,
+          season: state.season,
+          episode: state.episode
+        });
+      }
+
+      function smartResumePositionFor(context) {
+        if (!context?.group) return 0;
+        const key = progressKey(context.group, Number(context.season || 1), Number(context.episode || 1));
+        const progress = readProgress().find((item) =>
+          item.key === key && item.position > 5 && item.position < item.duration - 10
+        );
         return progress ? Math.max(0, Number(progress.position || 0) - Number(profilePreferences().rewind || 0)) : 0;
       }
 
