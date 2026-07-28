@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <meta name="lightbox-api-origin" content="https://hygiene-news-educated-shortly.trycloudflare.com">
+    <meta name="lightbox-api-origin" content="https://cents-hat-quote-tribunal.trycloudflare.com">
     <meta name="color-scheme" content="dark">
     <meta name="theme-color" content="#090a0c">
     <meta name="mobile-web-app-capable" content="yes">
@@ -1155,7 +1155,7 @@
       const $ = (selector) => document.querySelector(selector);
       const PROFILE_INDEX_KEY = "lightbox-profiles";
       const ACTIVE_PROFILE_KEY = "lightbox-active-profile";
-      const HOME_CACHE_KEY = "lightbox-home-catalog-v1";
+      const HOME_CACHE_KEY = "lightbox-home-catalog-v2";
       const SOURCE_CACHE_MAX_AGE = 30 * 60 * 1000;
       const androidPlayerListeners = { state: [], fullscreen: [], media: [], overlay: [] };
       if (window.AndroidPlayer) {
@@ -3798,7 +3798,7 @@
         state.featured = group ? { group, progress, discovery } : null;
         if (!group) return;
         $("#featured-title").textContent = group.title;
-        $("#featured-kicker").textContent = progress ? "Continue watching" : discovery ? "Popular now" : "Recently viewed";
+        $("#featured-kicker").textContent = progress ? "Continue watching" : discovery ? "Critically acclaimed" : "Recently viewed";
         $("#featured-description").textContent = progress
           ? `${group.type === "Movie" ? "Resume" : `Season ${progress.season} · Episode ${progress.episode}`} from ${formatTime(progress.position)}.`
           : discovery?.description || `${group.type}${group.year ? ` · ${group.year}` : ""} · Ready to watch`;
