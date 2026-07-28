@@ -590,29 +590,6 @@
         width: 96px; height: 48px; padding: 0 8px; border: 0; color: white;
         background: rgba(30,32,36,.88); font-size: 11px; font-weight: 850;
       }
-      .player-source-rail {
-        position: absolute; z-index: 9; display: flex; gap: 8px; padding: 10px;
-        color: white; background: rgba(10,11,14,.97); transition: opacity .18s ease, transform .18s ease;
-      }
-      .player-source-rail[hidden] { display: none; }
-      .player-source-rail strong { flex: 0 0 auto; align-self: center; padding: 0 6px; font-size: 12px; }
-      .player-source-choices { min-width: 0; display: flex; gap: 7px; overflow-x: auto; scrollbar-width: thin; }
-      .player-source-choice {
-        min-width: 108px; min-height: 52px; padding: 6px 12px; border: 0;
-        color: #d8dbe0; background: #24272c; font-size: 11px; font-weight: 850; text-align: left;
-      }
-      .player-source-choice span { display: block; margin-top: 3px; color: #9ca2ac; font-size: 9px; font-weight: 700; }
-      .player-source-choice.active { color: #090a0c; background: white; }
-      .player-source-choice.active span { color: #555b64; }
-      .player-source-choice:hover, .player-source-choice:focus-visible { outline: 3px solid white; outline-offset: -3px; }
-      body:not(.native-player-app) .player-source-rail { left: 0; right: 0; bottom: 0; height: 76px; }
-      body:not(.native-player-app).source-rail-open .player-viewport { bottom: 76px; }
-      body:not(.native-player-app).source-rail-open .player-bottom { bottom: 76px; }
-      body.native-player-app .player-source-rail {
-        top: 84px; right: 0; bottom: 172px; width: 244px; flex-direction: column;
-        transform: translateX(0); box-shadow: -18px 0 44px rgba(0,0,0,.38);
-      }
-      body.native-player-app .player-source-choices { flex-direction: column; overflow: auto; }
       .mobile-control-label { display: none; font-size: 11px; font-weight: 900; }
       .mobile-only-player-action { display: none; }
       .player-timeline { display: grid; grid-template-columns: minmax(100px,1fr) auto; gap: 12px; align-items: center; }
@@ -839,22 +816,6 @@
         right: max(8px,calc(50vw - 88.8889dvh + 8px));
         bottom: calc(50% - var(--mobile-video-half-height) + 70px);
       }
-      body.mobile-player-open:not(.native-player-app) .player-source-rail {
-        top: calc(50% + var(--mobile-video-half-height)); right: 0; bottom: auto; left: 0;
-        width: var(--mobile-video-width); height: min(76px, calc(50dvh - var(--mobile-video-half-height)));
-        margin: auto; padding: 7px;
-      }
-      body.mobile-player-open:not(.native-player-app).source-rail-open .player-viewport { bottom: auto; }
-      body.mobile-player-open:not(.native-player-app).source-rail-open .player-bottom {
-        bottom: calc(50% - var(--mobile-video-half-height));
-      }
-      @media (orientation: landscape) and (max-height: 600px) {
-        body.mobile-player-open:not(.native-player-app) .player-source-rail {
-          top: auto; bottom: 0; height: 62px; background: rgba(10,11,14,.94);
-        }
-        body.mobile-player-open:not(.native-player-app).source-rail-open .player-bottom { bottom: 62px; }
-        body.mobile-player-open:not(.native-player-app) .player-source-choice { min-height: 46px; }
-      }
       @media (max-width: 760px) and (orientation: portrait) {
         body.mobile-player-open .player-shell {
           display: grid; grid-template-rows: minmax(104px,1fr) var(--mobile-video-height) minmax(150px,1fr);
@@ -1068,7 +1029,7 @@
             <button class="player-control" id="open-browser-player" title="Open as a top-level browser player" aria-label="Open in browser" hidden><svg viewBox="0 0 24 24"><path d="M14 5h5v5M10 14 19 5M19 13v6H5V5h6"/></svg></button>
             <button class="player-control" id="close-ads" title="Remove visible ad overlays" aria-label="Remove ads"><svg viewBox="0 0 24 24"><path d="m4 4 16 16M7 7H5v12h12v-2M9 5h10v10"/></svg></button>
             <button class="player-control" id="refresh-player" title="Refresh video" aria-label="Refresh video"><svg viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M6.1 9a7 7 0 0 1 11.7-2L20 9M4 15l2.2 2a7 7 0 0 0 11.7-2"/></svg></button>
-            <button class="player-control" id="try-next-source" title="Choose playback source" aria-label="Choose playback source"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1" class="filled"/><circle cx="12" cy="12" r="1" class="filled"/><circle cx="19" cy="12" r="1" class="filled"/></svg></button>
+            <button class="player-control" id="try-next-source" title="Try another playback path" aria-label="Try another playback path"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1" class="filled"/><circle cx="12" cy="12" r="1" class="filled"/><circle cx="19" cy="12" r="1" class="filled"/></svg></button>
             <button class="player-control" id="player-up-next" title="Episodes and recommendations" aria-label="Episodes and recommendations"><svg viewBox="0 0 24 24"><path d="m8 5 10 7-10 7zM20 5v14"/></svg></button>
             <select class="player-source-picker" id="player-source-picker" title="Choose playback source" aria-label="Choose playback source" hidden></select>
             <button class="player-control" id="player-captions" title="Captions" aria-label="Captions"><span class="cc-icon">CC</span></button>
@@ -1084,10 +1045,6 @@
           <button class="provider-play-overlay" id="provider-play-overlay" type="button" aria-label="Start video" title="Start video" hidden><svg viewBox="0 0 24 24"><path d="m8 5 11 7-11 7z"/></svg></button>
           <div class="player-touch-layer" id="player-touch-layer" aria-hidden="true"></div>
         </div>
-        <aside class="player-source-rail" id="player-source-rail" aria-label="Playback sources" hidden>
-          <strong>Sources</strong>
-          <div class="player-source-choices" id="player-source-choices"></div>
-        </aside>
         <footer class="player-bottom">
           <div class="provider-control-hint">Tap the video to use this provider’s playback controls</div>
           <div class="player-timeline">
@@ -1169,7 +1126,6 @@
         sourceAttemptStartedAt: 0,
         sourceAttemptTimer: null,
         sourceErrorTimer: null,
-        sourceRailTimer: null,
         sourceStarted: false,
         providerInteractionAt: 0,
         providerLastFrameLoadAt: 0,
@@ -1226,7 +1182,6 @@
         onOverlayAction: (listener) => subscribeAndroidPlayer("overlay", listener)
       } : null;
       const desktopPlayer = window.electronPlayer || androidPlayer;
-      document.body.classList.toggle("native-player-app", Boolean(desktopPlayer?.available));
       const views = {
         home: $("#home-view"),
         search: $("#search-view"),
@@ -1301,7 +1256,6 @@
               $("#player-loading").hidden = true;
               recordSourceEvent(state.currentSource, "success", Date.now() - state.sourceAttemptStartedAt);
               rememberSourceAffinity(state.currentSource);
-              schedulePlayerSourceRailDismiss();
             }
             if (status.state === "ready" && !state.sourceStarted) {
               state.providerLastFrameLoadAt = Date.now();
@@ -1565,7 +1519,7 @@
             }, 1000);
           }
         });
-        $("#try-next-source").addEventListener("click", togglePlayerSourceRail);
+        $("#try-next-source").addEventListener("click", tryNextSource);
         $("#refresh-player").addEventListener("click", () => void refreshActivePlayer(false));
         $("#player-source-picker").addEventListener("change", () => {
           const source = state.sources[Number($("#player-source-picker").value)];
@@ -1967,53 +1921,12 @@
 
       function renderPlayerSourcePicker() {
         const picker = $("#player-source-picker");
-        picker.hidden = true;
+        picker.hidden = state.sources.length < 2;
         picker.innerHTML = state.sources.map((source, index) =>
           `<option value="${index}">${index === 0 ? "Best" : `Source ${index + 1}`}</option>`
         ).join("");
         const currentIndex = Math.max(0, state.sources.indexOf(state.currentSource));
         picker.value = String(currentIndex);
-        const choices = $("#player-source-choices");
-        choices.innerHTML = state.sources.map((source, index) =>
-          `<button class="player-source-choice${index === currentIndex ? " active" : ""}" data-player-source="${index}">
-            ${index === 0 ? "Best match" : `Source ${index + 1}`}
-            <span>${escapeHTML(sourceHealthLabel(source))}</span>
-          </button>`
-        ).join("");
-        choices.querySelectorAll("[data-player-source]").forEach((button) => {
-          button.addEventListener("click", () => {
-            const source = state.sources[Number(button.dataset.playerSource)];
-            if (source && source !== state.currentSource) void playSource(source);
-            else hidePlayerSourceRail();
-          });
-        });
-        if (state.sources.length < 2) hidePlayerSourceRail();
-      }
-
-      function showPlayerSourceRail(persist = false) {
-        if (state.sources.length < 2 || $("#player-modal").hidden) return;
-        clearTimeout(state.sourceRailTimer);
-        $("#player-source-rail").hidden = false;
-        document.body.classList.add("source-rail-open");
-        if (!persist) state.sourceRailTimer = setTimeout(hidePlayerSourceRail, state.sourceStarted ? 1800 : 7000);
-      }
-
-      function hidePlayerSourceRail() {
-        clearTimeout(state.sourceRailTimer);
-        state.sourceRailTimer = null;
-        $("#player-source-rail").hidden = true;
-        document.body.classList.remove("source-rail-open");
-      }
-
-      function togglePlayerSourceRail() {
-        if ($("#player-source-rail").hidden) showPlayerSourceRail(true);
-        else hidePlayerSourceRail();
-      }
-
-      function schedulePlayerSourceRailDismiss() {
-        if ($("#player-source-rail").hidden) return;
-        clearTimeout(state.sourceRailTimer);
-        state.sourceRailTimer = setTimeout(hidePlayerSourceRail, 1400);
       }
 
       async function playSource(source) {
@@ -2074,7 +1987,6 @@
         $("#previous-episode").disabled = state.selected.type === "Movie" || (state.season === Number(state.selected.seasons[0] || 1) && state.episode === 1);
         $("#next-episode").disabled = state.selected.type === "Movie";
         $("#try-next-source").disabled = state.sources.length < 2;
-        showPlayerSourceRail(false);
         $("#player-loading").hidden = false;
         const target = source.browserUrl || source.url;
         if (source.external || source.browserUrl) {
@@ -2657,7 +2569,6 @@
           $("#player-loading").hidden = true;
           recordSourceEvent(source, "success", Date.now() - state.sourceAttemptStartedAt);
           rememberSourceAffinity(source);
-          schedulePlayerSourceRailDismiss();
         }, 8000);
       }
 
@@ -2694,7 +2605,6 @@
         ++state.playerRequestToken;
         clearTimeout(state.sourceAttemptTimer);
         clearTimeout(state.sourceErrorTimer);
-        hidePlayerSourceRail();
         clearTimeout(state.stallRecoveryTimer);
         state.stallRecoveryTimer = null;
         stopProviderPlayAttempts();
@@ -3726,7 +3636,6 @@
           clearTimeout(state.sourceAttemptTimer);
           recordSourceEvent(state.currentSource, "success", Date.now() - state.sourceAttemptStartedAt);
           rememberSourceAffinity(state.currentSource);
-          schedulePlayerSourceRailDismiss();
         }
         const progressing = currentTime > state.sourceLastTime + .05;
         if (media.paused || progressing) {
@@ -3784,7 +3693,6 @@
         if (!state.currentSource) return;
         clearTimeout(state.sourceAttemptTimer);
         recordSourceEvent(state.currentSource, "failure");
-        showPlayerSourceRail(true);
         const next = rankSources(state.sources).find((source) => !state.attemptedSources.has(sourceAttemptIdentity(source)));
         if (!next) {
           if (state.sources.some((source) => source.lightboxCachedAt)) {
