@@ -863,8 +863,6 @@
           <button class="nav-button" data-nav="my-list" title="My List">My List</button>
           <button class="nav-button" data-nav="search" title="Search">Search</button>
           <button class="nav-button" data-nav="sports" title="Sports">Sports</button>
-          <button class="nav-button" data-nav="recent" title="Recently viewed">History</button>
-          <button class="nav-button" data-nav="downloads" title="Downloads">Downloads</button>
           <div class="nav-spacer"></div>
           <span class="health-dot" id="health-dot" title="Resolver status"></span>
         </nav>
@@ -891,10 +889,6 @@
             <div class="section-head"><div><h2>Next Up</h2><p>Your next unwatched episodes</p></div></div>
             <div class="poster-grid" id="next-up-grid"></div>
           </section>
-          <section class="section" id="your-shows-section" hidden>
-            <div class="section-head"><div><h2>Your Shows</h2><p>Series you are actively watching</p></div></div>
-            <div class="poster-grid" id="your-shows-grid"></div>
-          </section>
           <section class="section" id="my-list-section" hidden>
             <div class="section-head"><div><h2>My List</h2><p>Saved for later</p></div></div>
             <div class="poster-grid" id="my-list-grid"></div>
@@ -905,7 +899,7 @@
           </section>
           <div id="discovery-rows"><div class="empty-state">Loading movies and series…</div></div>
           <section class="section" id="downloads-section">
-            <div class="section-head"><div><h2>Get Lightbox</h2><p>Use the lightweight web app or install the full native player</p></div><span class="result-meta">Version 0.29.0</span></div>
+            <div class="section-head"><div><h2>Get Lightbox</h2><p>Use the web app or install the native player</p></div><span class="result-meta">Current downloads</span></div>
             <div class="download-grid">
               <a class="download-card" href="https://mikeintech.github.io/light-resolver/"><small>LIGHTWEIGHT · NO DOWNLOAD</small><strong>Web / PWA</strong><span>Best for phones and quick desktop access</span></a>
               <a class="download-card" href="https://github.com/mikeintech/light-resolver/releases/download/v0.32.0/Lightbox-0.32.0.apk"><small>ANDROID · ANDROID TV</small><strong>Android APK</strong><span>Shield, Google TV, Fire TV, G Cloud and phones</span></a>
@@ -944,7 +938,7 @@
                   <button class="primary" id="play-button">▶ Play</button>
                   <button class="secondary quiet-action" id="my-list-button">＋ My List</button>
                   <button class="secondary quiet-action" id="watched-button">✓ Mark watched</button>
-                  <button class="secondary quiet-action" id="resolve-button" title="Choose a different playback option">•••</button>
+                  <button class="secondary quiet-action" id="resolve-button" title="Choose a different playback option" hidden>•••</button>
                 </div>
               </div>
             </div>
@@ -1028,12 +1022,12 @@
           <div class="player-actions">
             <button class="player-control" id="open-browser-player" title="Open as a top-level browser player" aria-label="Open in browser" hidden><svg viewBox="0 0 24 24"><path d="M14 5h5v5M10 14 19 5M19 13v6H5V5h6"/></svg></button>
             <button class="player-control" id="refresh-player" title="Refresh video" aria-label="Refresh video"><svg viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M6.1 9a7 7 0 0 1 11.7-2L20 9M4 15l2.2 2a7 7 0 0 0 11.7-2"/></svg></button>
-            <button class="player-control" id="try-next-source" title="Try another playback path" aria-label="Try another playback path"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1" class="filled"/><circle cx="12" cy="12" r="1" class="filled"/><circle cx="19" cy="12" r="1" class="filled"/></svg></button>
+            <button class="player-control" id="try-next-source" title="Try another playback path" aria-label="Try another playback path" hidden><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1" class="filled"/><circle cx="12" cy="12" r="1" class="filled"/><circle cx="19" cy="12" r="1" class="filled"/></svg></button>
             <button class="player-control" id="player-up-next" title="Episodes and recommendations" aria-label="Episodes and recommendations" hidden><svg viewBox="0 0 24 24"><path d="m8 5 10 7-10 7zM20 5v14"/></svg></button>
             <select class="player-source-picker" id="player-source-picker" title="Choose playback source" aria-label="Choose playback source" hidden></select>
             <button class="player-control" id="player-captions" title="Captions" aria-label="Captions"><span class="cc-icon">CC</span></button>
-            <button class="player-control" id="player-cast" title="Cast" aria-label="Cast"><svg viewBox="0 0 24 24"><path d="M4 18a2 2 0 0 1 2 2M4 14a6 6 0 0 1 6 6M4 10a10 10 0 0 1 10 10M5 5h14v11"/></svg></button>
-            <button class="player-control mobile-only-player-action" id="mobile-airplay" title="AirPlay" aria-label="AirPlay"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13"/><path class="filled" d="m12 14 6 7H6z"/></svg></button>
+            <button class="player-control" id="player-cast" title="Cast" aria-label="Cast" hidden><svg viewBox="0 0 24 24"><path d="M4 18a2 2 0 0 1 2 2M4 14a6 6 0 0 1 6 6M4 10a10 10 0 0 1 10 10M5 5h14v11"/></svg></button>
+            <button class="player-control mobile-only-player-action" id="mobile-airplay" title="AirPlay" aria-label="AirPlay" hidden><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13"/><path class="filled" d="m12 14 6 7H6z"/></svg></button>
             <button class="player-control" id="player-pip" title="Picture in picture" aria-label="Picture in picture"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14"/><rect x="12" y="11" width="7" height="6" class="filled"/></svg></button>
             <button class="player-control mobile-only-player-action" id="mobile-player-settings" title="Playback settings" aria-label="Playback settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1A8 8 0 0 0 15 6l-.3-2.6h-4L10.4 6a8 8 0 0 0-1.8 1.1l-2.4-1-2 3.4L6.1 11a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.4-1A8 8 0 0 0 10 18l.3 2.6h4L14.6 18a8 8 0 0 0 1.8-1.1l2.4 1 2-3.4-1.9-1.5a7 7 0 0 0 .1-1z"/></svg></button>
             <button class="player-control" id="fullscreen-player" title="Fullscreen" aria-label="Fullscreen"><svg viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg></button>
@@ -1067,7 +1061,7 @@
                 <button class="player-control" id="mute-player" title="Mute" aria-label="Mute"><svg viewBox="0 0 24 24"><path d="M5 9v6h4l5 4V5L9 9zM17 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/></svg></button>
                 <input id="volume-player" type="range" min="0" max="100" value="100" aria-label="Volume">
               </div>
-              <button class="player-control" id="player-airplay" title="AirPlay" aria-label="AirPlay"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13"/><path class="filled" d="m12 14 6 7H6z"/></svg></button>
+              <button class="player-control" id="player-airplay" title="AirPlay" aria-label="AirPlay" hidden><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13"/><path class="filled" d="m12 14 6 7H6z"/></svg></button>
               <button class="player-control" id="player-settings" title="Playback settings" aria-label="Playback settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1A8 8 0 0 0 15 6l-.3-2.6h-4L10.4 6a8 8 0 0 0-1.8 1.1l-2.4-1-2 3.4L6.1 11a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.4-1A8 8 0 0 0 10 18l.3 2.6h4L14.6 18a8 8 0 0 0 1.8-1.1l2.4 1 2-3.4-1.9-1.5a7 7 0 0 0 .1-1z"/></svg></button>
             </div>
           </div>
@@ -1078,7 +1072,7 @@
             <select id="player-speed"><option value=".75">0.75×</option><option value="1" selected>Normal</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select>
           </label>
           <button class="player-setting" id="settings-captions" type="button"><span>Captions</span><strong id="caption-status">Automatic</strong></button>
-          <label class="player-setting"><span>Block ads and popups</span><input id="adblock-toggle" type="checkbox" checked></label>
+          <label class="player-setting" hidden><span>Block ads and popups</span><input id="adblock-toggle" type="checkbox" checked></label>
           <label class="player-setting"><span>Block provider clicks</span><input id="interaction-lock" type="checkbox"></label>
         </aside>
         <aside class="player-settings-panel" id="player-up-next-panel" hidden>
@@ -1238,7 +1232,6 @@
         renderRecent();
         renderContinueWatching();
         renderNextUp();
-        renderYourShows();
         renderMyList();
         renderFeatured();
         void renderHomeCatalog();
@@ -1945,7 +1938,7 @@
         state.providerInteractionAt = 0;
         state.providerLastFrameLoadAt = 0;
         state.sourceLastTime = 0;
-        state.sourceLastBufferAt = 0;
+        state.sourceLastBufferAt = Date.now();
         clearTimeout(state.stallRecoveryTimer);
         state.stallRecoveryTimer = null;
         stopProviderPlayAttempts();
@@ -2005,7 +1998,7 @@
         }
         state.sourceAttemptTimer = setTimeout(() => {
           if (!state.sourceStarted && state.currentSource === source) void handleSourceFailure("timeout");
-        }, 24_000);
+        }, 40_000);
         showPlayerChrome(false);
       }
 
@@ -2068,7 +2061,6 @@
           updateControls();
         });
         video.addEventListener("waiting", () => {
-          recordSourceEvent(state.currentSource, "buffer");
           scheduleStallRecovery();
         });
         video.addEventListener("error", () => void handleSourceFailure("media"));
@@ -2107,7 +2099,7 @@
           playLocalMedia(payload.url, true);
           state.sourceAttemptTimer = setTimeout(() => {
             if (!state.sourceStarted && state.currentSource === source) void handleSourceFailure("timeout");
-          }, 24_000);
+          }, 40_000);
           showPlayerChrome(false);
           return;
         } catch {
@@ -2148,7 +2140,7 @@
         showToast("This source uses its own video controls. Tap the video to interact.");
         state.sourceAttemptTimer = setTimeout(() => {
           if (!state.sourceStarted && state.playerMode === "browser-frame") void handleSourceFailure("timeout");
-        }, 24_000);
+        }, 40_000);
         showPlayerChrome(false);
       }
 
@@ -2465,7 +2457,7 @@
         const startedAt = Date.now();
         const attempt = async () => {
           if (state.currentSource !== source || state.sourceStarted || $("#player-modal").hidden
-            || Date.now() - startedAt > 24_000) {
+            || Date.now() - startedAt > 40_000) {
             clearInterval(state.providerPlayRetryTimer);
             state.providerPlayRetryTimer = null;
             return;
@@ -3173,7 +3165,6 @@
         writeProfileJSON("progress", next.slice(0, 48));
         renderContinueWatching();
         renderNextUp();
-        renderYourShows();
         renderResumeStatus();
         updatePlayLabel();
       }
@@ -3431,7 +3422,6 @@
         updateWatchedButton();
         renderContinueWatching();
         renderNextUp();
-        renderYourShows();
       }
 
       function isSelectedWatched() {
@@ -3622,7 +3612,7 @@
           state.stallRecoveryTimer = null;
         } else if (state.sourceStarted) {
           scheduleStallRecovery();
-          if (readyState < 3 && Date.now() - state.sourceLastBufferAt > 6000) {
+          if (readyState < 3 && Date.now() - state.sourceLastBufferAt > 20_000) {
             state.sourceLastBufferAt = Date.now();
             recordSourceEvent(state.currentSource, "buffer");
           }
@@ -3637,10 +3627,16 @@
       function scheduleStallRecovery() {
         if (!state.sourceStarted || state.stallRecoveryTimer || !state.currentSource) return;
         const source = state.currentSource;
-        state.stallRecoveryTimer = setTimeout(() => {
+        state.stallRecoveryTimer = setTimeout(async () => {
           state.stallRecoveryTimer = null;
-          if (state.currentSource === source && state.sourceStarted) void refreshActivePlayer(true);
-        }, 12_000);
+          if (state.currentSource !== source || !state.sourceStarted) return;
+          showToast("Buffering · waiting for this source…");
+          await commandActivePlayer("play").catch(() => undefined);
+          state.stallRecoveryTimer = setTimeout(() => {
+            state.stallRecoveryTimer = null;
+            if (state.currentSource === source && state.sourceStarted) void refreshActivePlayer(true);
+          }, 20_000);
+        }, 30_000);
       }
 
       async function refreshActivePlayer(automatic) {
@@ -3651,8 +3647,8 @@
         clearTimeout(state.stallRecoveryTimer);
         state.stallRecoveryTimer = null;
         $("#player-loading").hidden = false;
-        $("#player-loading").innerHTML = `<div><div class="spinner"></div><span>${automatic ? "Playback stalled · recovering…" : "Refreshing video…"}</span></div>`;
-        showToast(automatic ? "Playback stalled. Recovering…" : "Refreshing video…");
+        $("#player-loading").innerHTML = `<div><div class="spinner"></div><span>${automatic ? "Still buffering · reloading this source…" : "Refreshing video…"}</span></div>`;
+        showToast(automatic ? "Still buffering. Reloading this source…" : "Refreshing video…");
         await playSource(state.currentSource);
       }
 
