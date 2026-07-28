@@ -1143,6 +1143,9 @@
         providerPlayWindowTimer: null,
         playbackContext: null,
         acceptPlaybackProgress: false,
+        playbackCheckpointKey: "",
+        playbackCheckpoint: 0,
+        lastCheckpointRestoreAt: 0,
         titleCache: null
       };
 
@@ -1909,6 +1912,12 @@
           season: state.season,
           episode: state.episode
         };
+        const checkpointKey = progressKey(playbackContext.group, playbackContext.season, playbackContext.episode);
+        if (state.playbackCheckpointKey !== checkpointKey) {
+          state.playbackCheckpointKey = checkpointKey;
+          state.playbackCheckpoint = smartResumePositionFor(playbackContext);
+          state.lastCheckpointRestoreAt = 0;
+        }
         state.playerRecommendations = recommendationsFor(playbackContext.group, 6);
         renderPlayerUpNext();
         state.acceptPlaybackProgress = false;
@@ -1998,7 +2007,7 @@
         }
         state.sourceAttemptTimer = setTimeout(() => {
           if (!state.sourceStarted && state.currentSource === source) void handleSourceFailure("timeout");
-        }, 40_000);
+        }, 24_000);
         showPlayerChrome(false);
       }
 
@@ -2099,7 +2108,7 @@
           playLocalMedia(payload.url, true);
           state.sourceAttemptTimer = setTimeout(() => {
             if (!state.sourceStarted && state.currentSource === source) void handleSourceFailure("timeout");
-          }, 40_000);
+          }, 24_000);
           showPlayerChrome(false);
           return;
         } catch {
@@ -2140,7 +2149,7 @@
         showToast("This source uses its own video controls. Tap the video to interact.");
         state.sourceAttemptTimer = setTimeout(() => {
           if (!state.sourceStarted && state.playerMode === "browser-frame") void handleSourceFailure("timeout");
-        }, 40_000);
+        }, 24_000);
         showPlayerChrome(false);
       }
 
@@ -2457,7 +2466,7 @@
         const startedAt = Date.now();
         const attempt = async () => {
           if (state.currentSource !== source || state.sourceStarted || $("#player-modal").hidden
-            || Date.now() - startedAt > 40_000) {
+            || Date.now() - startedAt > 24_000) {
             clearInterval(state.providerPlayRetryTimer);
             state.providerPlayRetryTimer = null;
             return;
@@ -3606,6 +3615,17 @@
           recordSourceEvent(state.currentSource, "success", Date.now() - state.sourceAttemptStartedAt);
           rememberSourceAffinity(state.currentSource);
         }
+        if (state.sourceStarted && duration > 0 && state.playbackCheckpoint > 20
+          && currentTime < 5 && state.playbackCheckpoint - currentTime > 15
+          && Date.now() - state.lastCheckpointRestoreAt > 8_000) {
+          state.lastCheckpointRestoreAt = Date.now();
+          const checkpoint = Math.min(state.playbackCheckpoint, Math.max(0, duration - 10));
+          showToast(`Returning to ${formatTime(checkpoint)}…`);
+          void commandActivePlayer("position", checkpoint / duration);
+          state.sourceLastTime = checkpoint;
+          return;
+        }
+        if (currentTime > state.playbackCheckpoint) state.playbackCheckpoint = currentTime;
         const progressing = currentTime > state.sourceLastTime + .05;
         if (media.paused || progressing) {
           clearTimeout(state.stallRecoveryTimer);
@@ -3630,13 +3650,13 @@
         state.stallRecoveryTimer = setTimeout(async () => {
           state.stallRecoveryTimer = null;
           if (state.currentSource !== source || !state.sourceStarted) return;
-          showToast("Buffering · waiting for this source…");
+          showToast("Buffering · retrying playback…");
           await commandActivePlayer("play").catch(() => undefined);
           state.stallRecoveryTimer = setTimeout(() => {
             state.stallRecoveryTimer = null;
             if (state.currentSource === source && state.sourceStarted) void refreshActivePlayer(true);
-          }, 20_000);
-        }, 30_000);
+          }, 6_000);
+        }, 10_000);
       }
 
       async function refreshActivePlayer(automatic) {
