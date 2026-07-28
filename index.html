@@ -1027,7 +1027,6 @@
           <div class="player-title"><strong id="player-title">Loading player</strong><span id="player-subtitle"></span></div>
           <div class="player-actions">
             <button class="player-control" id="open-browser-player" title="Open as a top-level browser player" aria-label="Open in browser" hidden><svg viewBox="0 0 24 24"><path d="M14 5h5v5M10 14 19 5M19 13v6H5V5h6"/></svg></button>
-            <button class="player-control" id="close-ads" title="Remove visible ad overlays" aria-label="Remove ads"><svg viewBox="0 0 24 24"><path d="m4 4 16 16M7 7H5v12h12v-2M9 5h10v10"/></svg></button>
             <button class="player-control" id="refresh-player" title="Refresh video" aria-label="Refresh video"><svg viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M6.1 9a7 7 0 0 1 11.7-2L20 9M4 15l2.2 2a7 7 0 0 0 11.7-2"/></svg></button>
             <button class="player-control" id="try-next-source" title="Try another playback path" aria-label="Try another playback path"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1" class="filled"/><circle cx="12" cy="12" r="1" class="filled"/><circle cx="19" cy="12" r="1" class="filled"/></svg></button>
             <button class="player-control" id="player-up-next" title="Episodes and recommendations" aria-label="Episodes and recommendations"><svg viewBox="0 0 24 24"><path d="m8 5 10 7-10 7zM20 5v14"/></svg></button>
@@ -1499,26 +1498,6 @@
           renderEpisodes();
         });
         $("#close-player").addEventListener("click", closePlayer);
-        $("#close-ads").addEventListener("click", async () => {
-          const result = await commandActivePlayer("clean");
-          if (!result?.handled && state.playerMode === "browser-frame") {
-            showToast("The browser protects cross-site player contents. Use the top-level player to dismiss its overlays.");
-          }
-          showToast(result?.handled ? "Ad closed. Automatic cleanup is still active." : "Automatic ad cleanup is active.");
-          const modal = $("#player-modal");
-          const layer = $("#player-touch-layer");
-          modal.classList.add("controls-hidden");
-          if (state.playerMode === "browser-frame") {
-            clearTimeout(state.providerTouchTimer);
-            state.playerTouchPhase = 2;
-            noteProviderInteraction();
-            layer.classList.add("provider-pass");
-            state.providerTouchTimer = setTimeout(() => {
-              layer.classList.remove("provider-pass");
-              state.playerTouchPhase = 0;
-            }, 1000);
-          }
-        });
         $("#try-next-source").addEventListener("click", tryNextSource);
         $("#refresh-player").addEventListener("click", () => void refreshActivePlayer(false));
         $("#player-source-picker").addEventListener("change", () => {
